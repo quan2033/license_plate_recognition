@@ -1,0 +1,29 @@
+# ============================================================
+# Thư viện cho hệ thống nhận diện biển số xe
+# Cài đặt:  pip install -r requirement.txt
+# ============================================================
+
+# --- Phát hiện biển số (YOLO) ---
+ultralytics>=8.4
+
+# --- Xử lý ảnh, video, webcam ---
+opencv-python>=4.10
+
+# --- Chạy các model OCR (định dạng ONNX, trên CPU) ---
+onnxruntime>=1.20
+
+# --- Thư viện phụ trợ của fast-plate-ocr ---
+# Cài thủ công tại đây vì fast-plate-ocr được cài với --no-deps (xem lưu ý bên dưới).
+pyyaml
+rich
+tqdm
+
+# ============================================================
+# LƯU Ý QUAN TRỌNG: fast-plate-ocr phải cài RIÊNG sau bước trên:
+#
+#     pip install --no-deps fast-plate-ocr
+#
+# Lý do: nếu cài bình thường, gói này kéo theo opencv-python-headless
+# và ghi đè lên opencv-python, khiến cv2.imshow không còn hiển thị
+# được cửa sổ kết quả.
+# ============================================================

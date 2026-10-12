@@ -1,0 +1,19 @@
+# Môi trường ảo (hơn 48.000 file, mỗi người tự tạo trên máy mình)
+venv/
+
+# Cache Python
+__pycache__/
+*.pyc
+
+# Dữ liệu và kết quả huấn luyện
+dataset/
+runs/
+
+# Kết quả chạy
+plate_records.csv
+output.mp4
+ketqua.jpg
+
+# IDE
+.vscode/
+.idea/
