@@ -6,7 +6,7 @@ Nguồn vào:
     python main.py --source 0
 """
 
-# Diem vao giu lai de tuong thich voi lenh `python main.py`.
+# Diem vao giu lai de tuong thich voi lenh `python main.py`
 # Logic moi nam trong cli.py, detector.py, frame_processor.py, media.py,
 # plate_ocr.py va plate_tracking.py.
 if __name__ == "__main__":
