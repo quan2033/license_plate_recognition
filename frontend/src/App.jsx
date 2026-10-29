@@ -33,6 +33,7 @@ function App() {
   const streamRef = useRef(null)
   const captureCanvasRef = useRef(null)
   const cameraBusyRef = useRef(false)
+  const captureRef = useRef(null)
   const lastSavedPlateRef = useRef({})
 
   const imagePlates = resultMode === 'image'
@@ -60,7 +61,7 @@ function App() {
     if (!cameraOn) return undefined
 
     const timer = window.setInterval(() => {
-      captureAndRecognize()
+      captureRef.current?.()
     }, 1500)
 
     return () => window.clearInterval(timer)
@@ -228,6 +229,11 @@ useEffect(() => {
       setCameraBusy(false)
     }
   }
+
+  // luôn giữ bản mới nhất của hàm chụp để interval ở trên không dùng state cũ
+  useEffect(() => {
+    captureRef.current = captureAndRecognize
+  })
 
   function changeCamera(deviceId) {
     setCameraDeviceId(deviceId)
