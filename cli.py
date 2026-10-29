@@ -1,4 +1,4 @@
-"""Diem vao dong lenh cua ung dung."""
+"""Điểm vào dòng lệnh của ứng dụng"""
 
 import argparse
 

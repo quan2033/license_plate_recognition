@@ -17,3 +17,12 @@ ketqua.jpg
 # IDE
 .vscode/
 .idea/
+
+.venv/
+__pycache__/
+*.py[cod]
+.env
+backend/data/
+backend/outputs/
+*.lnk
+*.lnk
