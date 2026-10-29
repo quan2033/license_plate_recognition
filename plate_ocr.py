@@ -26,6 +26,10 @@ CROP_PADDING = 0.04
 #Dưới mức này thì coi như không đọc được
 MIN_CONFIDENCE = 0.6
 
+#Khung YOLO đôi khi hụt mất ký tự cuối: nếu đọc chưa chắc chắn thì thử lại với vùng cắt rộng hơn
+RETRY_BELOW_CONFIDENCE = 0.9
+WIDER_PADDINGS = (0.15, 0.3)
+
 #Biển VN không dùng I, J, O, Q, R, W làm
 SERIES_LETTERS = set("ABCDEFGHKLMNPSTUVXYZ")
 
@@ -166,3 +170,15 @@ def read_plate(plate):
     agreement = supporters[text] / len(recognizers)
     confidence = totals[text] / supporters[text] * (0.5 + 0.5 * agreement)
     return (text, confidence) if confidence >= MIN_CONFIDENCE else ("", confidence)
+
+
+def read_plate_wider(frame, box, text, confidence):
+    """Đọc chưa chắc chắn thì thử cắt rộng hơn, giữ kết quả có độ tin cậy cao nhất"""
+    if confidence >= RETRY_BELOW_CONFIDENCE:
+        return text, confidence
+    best_text, best_confidence = text, confidence
+    for padding in WIDER_PADDINGS:
+        wider_text, wider_confidence = read_plate(crop_plate(frame, box, padding))
+        if wider_text and wider_confidence > best_confidence:
+            best_text, best_confidence = wider_text, wider_confidence
+    return best_text, best_confidence
