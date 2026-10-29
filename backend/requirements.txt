@@ -1,0 +1,10 @@
+# Cài từ thư mục gốc dự án:  pip install -r backend/requirements.txt
+# (nhớ cài thêm: pip install --no-deps fast-plate-ocr  — xem README)
+-r ../requirement.txt
+
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9   # bắt buộc để nhận file upload (UploadFile)
+
+# Chỉ cần khi chạy test API (fastapi.testclient)
+httpx>=0.27

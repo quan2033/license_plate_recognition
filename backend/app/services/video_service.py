@@ -1,19 +1,30 @@
 
 import base64
 import csv
+import logging
+import sqlite3
 import tempfile
 from pathlib import Path
 
 import cv2
 from ultralytics import YOLO
 
+from backend.app.database import video_repository
 from backend.app.services.recognition_service import get_model
 from frame_processor import process_frame
 from plate_tracking import PlateStabilizer, CsvLogger
 
 
+logger = logging.getLogger(__name__)
+
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 OUTPUT_DIR = PROJECT_ROOT / "backend" / "outputs"
+
+
+def _track_confidence(track: dict) -> float | None:
+    """Độ tin cậy OCR trung bình của các lần đọc trùng với biển đã được chấp nhận."""
+    scores = [score for text, score in track["votes"] if text == track["accepted"]]
+    return round(sum(scores) / len(scores), 4) if scores else None
 
 
 def recognize_video(video_bytes: bytes, filename: str) -> dict:
@@ -100,6 +111,23 @@ def recognize_video(video_bytes: bytes, filename: str) -> dict:
             for track in stabilizer.tracks.values()
             if track.get("accepted")
         })
+
+        # Mỗi biển lưu một lần; nếu nhiều track cùng biển thì lấy độ tin cậy cao nhất
+        confidences = {}
+        for track in stabilizer.tracks.values():
+            plate = track.get("accepted")
+            if plate:
+                score = _track_confidence(track)
+                if plate not in confidences or (score or 0) > (confidences[plate] or 0):
+                    confidences[plate] = score
+        try:
+            video_repository.add_many([
+                {"license_plate": plate, "ocr_confidence": confidences.get(plate),
+                 "source_type": "video", "filename": filename}
+                for plate in plates
+            ])
+        except sqlite3.Error:
+            logger.exception("Không lưu được biển số vào database")
 
         return {
             "message": "Video recognition completed",

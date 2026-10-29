@@ -25,7 +25,7 @@ async def recognize_uploaded_image(file: UploadFile = File(...)):
         raise HTTPException(status_code=413, detail="Image must be 10 MB or smaller")
 
     try:
-        return recognize_image(image_bytes)
+        return recognize_image(image_bytes, file.filename)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except FileNotFoundError as exc:
