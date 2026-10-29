@@ -1,4 +1,6 @@
 ﻿import base64
+import logging
+import sqlite3
 from functools import lru_cache
 from pathlib import Path
 
@@ -6,10 +8,13 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 
+from backend.app.database import video_repository
 from detector import detect_plates
 from plate_ocr import crop_plate, read_plate
 from visualization import draw_detection
 
+
+logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 MODEL_PATH = PROJECT_ROOT / "best.pt"
@@ -23,7 +28,7 @@ def get_model():
     return YOLO(str(MODEL_PATH))
 
 
-def recognize_image(image_bytes: bytes) -> dict:
+def recognize_image(image_bytes: bytes, filename: str | None = None) -> dict:
     image_array = np.frombuffer(image_bytes, dtype=np.uint8)
     frame = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
 
@@ -56,6 +61,16 @@ def recognize_image(image_bytes: bytes) -> dict:
         raise RuntimeError("Failed to encode processed image")
 
     image_base64 = base64.b64encode(encoded_image.tobytes()).decode("ascii")
+
+    # Chỉ lưu biển đọc được; lỗi database không làm mất kết quả nhận diện
+    try:
+        video_repository.add_many([
+            {**result, "source_type": "image", "filename": filename}
+            for result in results
+            if result["license_plate"]
+        ])
+    except sqlite3.Error:
+        logger.exception("Không lưu được biển số vào database")
 
     return {
         "count": len(results),
