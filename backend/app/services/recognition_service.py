@@ -10,7 +10,7 @@ from ultralytics import YOLO
 
 from backend.app.database import video_repository
 from detector import detect_plates
-from plate_ocr import crop_plate, read_plate
+from plate_ocr import crop_plate, read_plate, read_plate_wider
 from visualization import draw_detection
 
 
@@ -46,6 +46,7 @@ def recognize_image(image_bytes: bytes, filename: str | None = None) -> dict:
             continue
 
         plate_text, ocr_confidence = read_plate(plate_crop)
+        plate_text, ocr_confidence = read_plate_wider(frame, box, plate_text, ocr_confidence)
 
         draw_detection(frame, box, plate_text, detection_confidence)
 

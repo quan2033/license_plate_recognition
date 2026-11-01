@@ -230,6 +230,62 @@ useEffect(() => {
     }
   }
 
+  // Nạp lại lịch sử đã lưu trong database khi mở trang (chỉ có thông tin chữ, không có ảnh kết quả)
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadSavedHistory() {
+      try {
+        const [videoRes, cameraRes] = await Promise.all([
+          fetch(`${API_URL}/api/plates/video?limit=200`),
+          fetch(`${API_URL}/api/plates/camera?limit=200`),
+        ])
+        if (!videoRes.ok || !cameraRes.ok) return
+        const [videoData, cameraData] = await Promise.all([videoRes.json(), cameraRes.json()])
+
+        const toDate = (value) => new Date(value)
+        const fromVideo = videoData.items.map((row) => {
+          const isCamera = row.filename === 'camera-frame.jpg'
+          const mode = row.source_type === 'video' ? 'video' : 'image'
+          return {
+            id: `db-video-${row.id}`,
+            fileName: isCamera ? 'Camera trực tiếp' : row.filename || 'Không rõ tên file',
+            mode,
+            at: toDate(row.created_at),
+            plateCount: 1,
+            data: mode === 'video'
+              ? { plates: [row.license_plate] }
+              : { results: [row] },
+          }
+        })
+        const fromCamera = cameraData.items.map((row) => ({
+          id: `db-camera-${row.id}`,
+          fileName: 'Camera trực tiếp',
+          mode: 'image',
+          at: toDate(row.captured_at),
+          plateCount: 1,
+          data: { results: [row] },
+        }))
+
+        const saved = [...fromVideo, ...fromCamera]
+          .sort((a, b) => b.at - a.at)
+          .map(({ at, ...item }) => ({ ...item, time: at.toLocaleString('vi-VN') }))
+
+        if (!cancelled) {
+          // giữ các phiên vừa nhận diện trong lúc chờ nạp, bỏ bản trùng
+          setHistory((previous) => [...previous, ...saved])
+        }
+      } catch {
+        // backend chưa chạy: bỏ qua, trang vẫn dùng bình thường
+      }
+    }
+
+    loadSavedHistory()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   // luôn giữ bản mới nhất của hàm chụp để interval ở trên không dùng state cũ
   useEffect(() => {
     captureRef.current = captureAndRecognize
