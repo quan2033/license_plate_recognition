@@ -252,14 +252,19 @@ useEffect(() => {
   // Nạp lại lịch sử đã lưu trong database khi mở trang (chỉ có thông tin chữ, không có ảnh kết quả)
   useEffect(() => {
     let cancelled = false
+    let retryTimer = null
+    const maxAttempts = 10
+    const retryDelayMs = 1000
 
-    async function loadSavedHistory() {
+    async function loadSavedHistory(attempt = 1) {
       try {
         const [videoRes, cameraRes] = await Promise.all([
           fetch(`${API_URL}/api/plates/video?limit=200`),
           fetch(`${API_URL}/api/plates/camera?limit=200`),
         ])
-        if (!videoRes.ok || !cameraRes.ok) return
+        if (!videoRes.ok || !cameraRes.ok) {
+          throw new Error('History API unavailable')
+        }
         const [videoData, cameraData] = await Promise.all([videoRes.json(), cameraRes.json()])
 
         const toDate = (value) => new Date(value)
@@ -291,17 +296,27 @@ useEffect(() => {
           .map(({ at, ...item }) => ({ ...item, time: at.toLocaleString('vi-VN') }))
 
         if (!cancelled) {
-          // giữ các phiên vừa nhận diện trong lúc chờ nạp, bỏ bản trùng
-          setHistory((previous) => [...previous, ...saved])
+          // Giữ các phiên vừa nhận diện trong lúc chờ nạp và không thêm lại bản ghi đã có.
+          setHistory((previous) => {
+            const existingIds = new Set(previous.map((item) => item.id))
+            return [...previous, ...saved.filter((item) => !existingIds.has(item.id))]
+          })
         }
       } catch {
-        // backend chưa chạy: bỏ qua, trang vẫn dùng bình thường
+        // Backend có thể chưa sẵn sàng khi frontend vừa mở; tự thử lại thay vì chờ người dùng F5.
+        if (!cancelled && attempt < maxAttempts) {
+          retryTimer = window.setTimeout(
+            () => loadSavedHistory(attempt + 1),
+            retryDelayMs,
+          )
+        }
       }
     }
 
     loadSavedHistory()
     return () => {
       cancelled = true
+      if (retryTimer) window.clearTimeout(retryTimer)
     }
   }, [])
 
