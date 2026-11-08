@@ -10,6 +10,17 @@ const navItems = [
   { id: 'settings', icon: '⚙', label: 'Cài đặt' },
 ]
 
+function getHistoryPlates(item) {
+  const results = item?.data?.results ?? []
+  const videoPlates = item?.data?.plates ?? []
+  const plates = [
+    ...results.map((plate) => typeof plate === 'string' ? plate : plate?.license_plate),
+    ...videoPlates.map((plate) => typeof plate === 'string' ? plate : plate?.license_plate),
+  ]
+
+  return [...new Set(plates.filter(Boolean))]
+}
+
 function App() {
   const [page, setPage] = useState('recognition')
   const [mode, setMode] = useState('image')
@@ -22,6 +33,7 @@ function App() {
   const [history, setHistory] = useState([])
   const [apiStatus, setApiStatus] = useState('unknown')
   const [checkingApi, setCheckingApi] = useState(false)
+  const [selectedHistoryItem, setSelectedHistoryItem] = useState(null)
   const [cameraOn, setCameraOn] = useState(false)
   const [cameraBusy, setCameraBusy] = useState(false)
   const [cameraError, setCameraError] = useState('')
@@ -29,6 +41,7 @@ function App() {
   const [cameraDeviceId, setCameraDeviceId] = useState('')
   const [cameraImage, setCameraImage] = useState('')
   const [cameraResults, setCameraResults] = useState([])
+  const [cameraStreamVersion, setCameraStreamVersion] = useState(0)
   const videoRef = useRef(null)
   const streamRef = useRef(null)
   const captureCanvasRef = useRef(null)
@@ -53,6 +66,11 @@ function App() {
   useEffect(() => {
     return () => {
       streamRef.current?.getTracks().forEach((track) => track.stop())
+    }
+  }, [])
+
+  useEffect(() => {
+    return () => {
       if (preview) URL.revokeObjectURL(preview)
     }
   }, [preview])
@@ -114,6 +132,7 @@ async function startCamera(deviceId = cameraDeviceId) {
 
     // Bật trạng thái camera để React hiển thị thẻ video
     setCameraOn(true);
+    setCameraStreamVersion((version) => version + 1);
   } catch (err) {
     console.error('Camera error:', err);
 
@@ -135,7 +154,7 @@ async function startCamera(deviceId = cameraDeviceId) {
   }
 }
 useEffect(() => {
-  if (!cameraOn || !videoRef.current || !streamRef.current) {
+  if (page !== 'recognition' || !cameraOn || !videoRef.current || !streamRef.current) {
     return;
   }
 
@@ -149,7 +168,7 @@ useEffect(() => {
     console.error('Không phát được video:', err);
     setCameraError('Không thể hiển thị hình ảnh camera.');
   });
-}, [cameraOn]);
+}, [cameraOn, cameraStreamVersion, page]);
 
 
 
@@ -426,13 +445,7 @@ useEffect(() => {
   }
 
   function openHistoryItem(item) {
-    setMode(item.mode)
-    setResultMode(item.mode)
-    setResult(item.data)
-    setFile(null)
-    setPreview('')
-    setError('')
-    setPage('recognition')
+    setSelectedHistoryItem(item)
   }
 
   function clearSelection() {
@@ -931,8 +944,8 @@ useEffect(() => {
               <div className="overview-note">
                 <span className="note-icon">i</span>
                 <p>
-                  Lịch sử hiện chỉ được giữ trong bộ nhớ của trang. Tải lại trang sẽ xóa danh sách này;
-                  chưa có chức năng lưu lịch sử vào cơ sở dữ liệu.
+                  Các biển số đã nhận diện được lưu trong cơ sở dữ liệu SQLite và tự động nạp lại khi mở trang.
+                  Ảnh hoặc video nguồn không được lưu cùng bản ghi lịch sử.
                 </p>
               </div>
             </section>
@@ -1036,6 +1049,13 @@ useEffect(() => {
           </footer>
         </div>
       </main>
+
+      {selectedHistoryItem && (
+        <HistoryDetailModal
+          item={selectedHistoryItem}
+          onClose={() => setSelectedHistoryItem(null)}
+        />
+      )}
     </div>
   )
 }
@@ -1049,6 +1069,75 @@ function MetricCard({ label, value, icon, note }) {
       </div>
       <strong className="metric-value">{value}</strong>
       <span className="metric-note">{note}</span>
+    </div>
+  )
+}
+
+function HistoryDetailModal({ item, onClose }) {
+  const plates = getHistoryPlates(item)
+  const sourceType = item.fileName === 'Camera trực tiếp'
+    ? 'Camera trực tiếp'
+    : item.mode === 'image'
+      ? 'Hình ảnh'
+      : 'Video'
+
+  useEffect(() => {
+    function closeOnEscape(event) {
+      if (event.key === 'Escape') onClose()
+    }
+
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [onClose])
+
+  return (
+    <div className="history-modal-backdrop" onMouseDown={onClose}>
+      <section
+        className="history-detail-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="history-detail-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="history-detail-heading">
+          <div>
+            <span className="panel-kicker">RECOGNITION DETAIL</span>
+            <h2 id="history-detail-title">Chi tiết lịch sử</h2>
+          </div>
+          <button className="history-modal-close" onClick={onClose} aria-label="Đóng chi tiết">
+            ×
+          </button>
+        </div>
+
+        <div className="history-detail-grid">
+          <div className="history-detail-field history-detail-plates">
+            <span>Biển số quét được</span>
+            {plates.length ? (
+              <div className="history-plate-list">
+                {plates.map((plate) => <strong key={plate}>{plate}</strong>)}
+              </div>
+            ) : (
+              <strong className="history-no-plate">Không đọc được biển số</strong>
+            )}
+          </div>
+          <div className="history-detail-field">
+            <span>Thời gian quét</span>
+            <strong>{item.time || 'Không có thông tin'}</strong>
+          </div>
+          <div className="history-detail-field">
+            <span>Nguồn dữ liệu</span>
+            <strong>{sourceType}</strong>
+          </div>
+          <div className="history-detail-field">
+            <span>Tên nguồn</span>
+            <strong>{item.fileName || 'Không rõ'}</strong>
+          </div>
+        </div>
+
+        <div className="history-detail-actions">
+          <button className="primary-button" onClick={onClose}>Đóng</button>
+        </div>
+      </section>
     </div>
   )
 }
@@ -1077,7 +1166,9 @@ function HistoryTable({ items, onSelect }) {
           </tr>
         </thead>
         <tbody>
-          {items.map((item) => (
+          {items.map((item) => {
+            const plates = getHistoryPlates(item)
+            return (
             <tr key={item.id}>
               <td>
                 <div className="table-file">
@@ -1092,7 +1183,11 @@ function HistoryTable({ items, onSelect }) {
                   {item.fileName === 'Camera trực tiếp' ? 'CAMERA' : item.mode === 'image' ? 'HÌNH ẢNH' : 'VIDEO'}
                 </span>
               </td>
-              <td><strong className="table-count">{item.plateCount}</strong></td>
+              <td>
+                <strong className="table-plates">
+                  {plates.length ? plates.join(', ') : 'Không đọc được'}
+                </strong>
+              </td>
               <td className="table-time">{item.time}</td>
               <td>
                 <button className="text-button" onClick={() => onSelect(item)}>
@@ -1100,7 +1195,8 @@ function HistoryTable({ items, onSelect }) {
                 </button>
               </td>
             </tr>
-          ))}
+            )
+          })}
         </tbody>
       </table>
     </div>
