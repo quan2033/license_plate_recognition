@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import './App.css'
 
 const API_URL = 'http://127.0.0.1:8000'
+const CAMERA_CAPTURE_INTERVAL_MS = 500
 
 const navItems = [
   { id: 'overview', icon: '▦', label: 'Tổng quan' },
@@ -80,7 +81,7 @@ function App() {
 
     const timer = window.setInterval(() => {
       captureRef.current?.()
-    }, 1500)
+    }, CAMERA_CAPTURE_INTERVAL_MS)
 
     return () => window.clearInterval(timer)
   }, [cameraOn])
@@ -632,7 +633,7 @@ useEffect(() => {
                       <div>
                         <span className="panel-kicker">LIVE INPUT / 01</span>
                         <h2>Camera trực tiếp</h2>
-                        <p>Nhận diện tự động từ hình ảnh camera mỗi 1,5 giây.</p>
+                        <p>Nhận diện tự động từ hình ảnh camera mỗi 500 ms.</p>
                       </div>
                       <span className={`camera-state ${cameraOn ? 'active' : ''}`}>
                         <span className="status-dot" />

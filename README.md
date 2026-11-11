@@ -15,7 +15,7 @@ Pipeline nhận diện kết hợp YOLO để phát hiện vùng biển số, ba
 - Dùng ba model OCR cùng nhận dạng và chọn kết quả có mức đồng thuận tốt nhất.
 - Chuẩn hóa định dạng biển số Việt Nam và sửa một số ký tự dễ nhầm theo vị trí.
 - Ổn định kết quả trên nhiều frame để giảm nhấp nháy và hạn chế ghi sai.
-- Nhận diện camera trình duyệt tự động theo chu kỳ 1,5 giây.
+- Nhận diện camera trình duyệt tự động theo chu kỳ 500 ms.
 - Tải ảnh hoặc video trên giao diện web và tải video kết quả.
 - Lưu lịch sử vào SQLite, tự tải lại khi mở ứng dụng và hiển thị chi tiết từng bản ghi.
 - Hỗ trợ CLI, lưu ảnh/video đã chú thích và ghi lịch sử vào CSV.
@@ -207,7 +207,7 @@ Hiển thị số phiên xử lý, phiên có biển số, trạng thái camera,
 1. Mở mục **Nhận diện**.
 2. Chọn **Bật camera** và cấp quyền cho trình duyệt.
 3. Chọn thiết bị camera nếu máy có nhiều camera.
-4. Hệ thống chụp một frame mỗi 1,5 giây và gửi đến API nhận diện ảnh.
+4. Hệ thống thử chụp một frame mỗi 500 ms và gửi đến API nhận diện ảnh. Nếu lượt nhận diện trước chưa hoàn tất, lượt mới sẽ được bỏ qua để tránh gửi các yêu cầu chồng lên nhau.
 5. Kết quả mới nhất và biển số phát hiện được hiển thị bên cạnh luồng camera.
 6. Chọn **Dừng camera** để giải phóng thiết bị.
 
@@ -519,7 +519,7 @@ GET /api/plates/camera
 - Biển quá nhỏ, mờ, thiếu sáng hoặc bị cắt mất ký tự có thể không đọc được.
 - Biển quân đội/công vụ nền đỏ chưa nằm trong bộ quy tắc chuẩn hóa hiện tại.
 - Biển ô tô một dòng nghiêng mạnh có thể bị phân loại nhầm thành biển hai dòng.
-- Camera web gửi ảnh định kỳ 1,5 giây, chưa phải pipeline stream liên tục bằng WebSocket/WebRTC.
+- Camera web thử gửi ảnh định kỳ 500 ms, chưa phải pipeline stream liên tục bằng WebSocket/WebRTC; lượt chụp mới sẽ được bỏ qua nếu backend vẫn đang xử lý lượt trước.
 - Backend xử lý video đồng bộ trong request; video dài có thể mất nhiều thời gian.
 - `API_URL` và CORS đang cấu hình cho môi trường cục bộ.
 - Hệ thống chưa có xác thực, phân quyền hoặc giới hạn tần suất cho môi trường production.
