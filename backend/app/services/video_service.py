@@ -19,12 +19,7 @@ logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 OUTPUT_DIR = PROJECT_ROOT / "backend" / "outputs"
-
-
-def _track_confidence(track: dict) -> float | None:
-    """Độ tin cậy OCR trung bình của các lần đọc trùng với biển đã được chấp nhận."""
-    scores = [score for text, score in track["votes"] if text == track["accepted"]]
-    return round(sum(scores) / len(scores), 4) if scores else None
+TARGET_OCR_FPS = 10.0
 
 
 def recognize_video(video_bytes: bytes, filename: str) -> dict:
@@ -54,6 +49,9 @@ def recognize_video(video_bytes: bytes, filename: str) -> dict:
         fps = capture.get(cv2.CAP_PROP_FPS)
         if not fps or fps <= 0:
             fps = 25.0
+        # YOLO vẫn theo dõi mọi frame, còn OCR giữ khoảng 10 lần/giây để giảm
+        # thời gian CPU mà vẫn có nhiều cơ hội đọc mỗi biển xuất hiện trong video.
+        ocr_every = max(1, round(fps / TARGET_OCR_FPS))
 
         width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -94,7 +92,7 @@ def recognize_video(video_bytes: bytes, filename: str) -> dict:
                     stabilizer=stabilizer,
                     logger=None,
                     frame_number=frame_number,
-                    ocr_every=1,
+                    ocr_every=ocr_every,
                 )
 
                 writer.write(annotated)
@@ -105,21 +103,10 @@ def recognize_video(video_bytes: bytes, filename: str) -> dict:
         if frame_number == 0:
             raise ValueError("Video không có frame hợp lệ")
 
-        # Đọc các biển số đã được ổn định từ những track.
-        plates = sorted({
-            track["accepted"]
-            for track in stabilizer.tracks.values()
-            if track.get("accepted")
-        })
-
-        # Mỗi biển lưu một lần; nếu nhiều track cùng biển thì lấy độ tin cậy cao nhất
-        confidences = {}
-        for track in stabilizer.tracks.values():
-            plate = track.get("accepted")
-            if plate:
-                score = _track_confidence(track)
-                if plate not in confidences or (score or 0) > (confidences[plate] or 0):
-                    confidences[plate] = score
+        # Dùng toàn bộ biển từng được xác nhận trong phiên thay vì chỉ đọc các
+        # track còn sống ở frame cuối. Nhờ đó biển xuất hiện sớm vẫn được lưu.
+        confidences = dict(stabilizer.recognized_plates)
+        plates = sorted(confidences)
         try:
             video_repository.add_many([
                 {"license_plate": plate, "ocr_confidence": confidences.get(plate),

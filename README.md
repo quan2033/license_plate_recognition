@@ -5,14 +5,14 @@ Hệ thống nhận diện biển số xe từ **camera**, **ảnh** và **video
 - **Giao diện web:** React + Vite ở frontend, FastAPI ở backend và SQLite để lưu lịch sử.
 - **Dòng lệnh:** xử lý trực tiếp ảnh, video hoặc webcam bằng Python và OpenCV.
 
-Pipeline nhận diện kết hợp YOLO để phát hiện vùng biển số, ba model `fast-plate-ocr` để đọc ký tự, bộ quy tắc chuẩn hóa biển số Việt Nam và cơ chế ổn định kết quả qua nhiều frame.
+Pipeline nhận diện kết hợp YOLO để phát hiện vùng biển số, tối đa ba model `fast-plate-ocr` để đọc ký tự, bộ quy tắc chuẩn hóa biển số Việt Nam và cơ chế ổn định kết quả qua nhiều frame.
 
 ## Tính năng chính
 
 - Phát hiện biển số bằng trọng số YOLO đã huấn luyện trong `best.pt`.
 - Nhận dạng biển ô tô một dòng và biển xe máy hai dòng.
 - Chạy OCR trên CPU bằng ONNX Runtime, không cần Tesseract hoặc GPU.
-- Dùng ba model OCR cùng nhận dạng và chọn kết quả có mức đồng thuận tốt nhất.
+- Chạy model OCR nhỏ trước; kết quả rõ được chấp nhận ngay, trường hợp khó mới dùng thêm hai model để bỏ phiếu.
 - Chuẩn hóa định dạng biển số Việt Nam và sửa một số ký tự dễ nhầm theo vị trí.
 - Ổn định kết quả trên nhiều frame để giảm nhấp nháy và hạn chế ghi sai.
 - Nhận diện camera trình duyệt tự động theo chu kỳ 500 ms.
@@ -314,11 +314,13 @@ Frame
 
 Ba model sau được nạp khi cần:
 
-- `cct-s-v1-global-model`
-- `cct-s-v2-global-model`
 - `cct-xs-v2-global-model`
+- `cct-s-v2-global-model`
+- `cct-s-v1-global-model`
 
-Kết quả được tính theo độ tin cậy ký tự và mức đồng thuận giữa các model. Chuỗi dưới ngưỡng OCR `0.6` hoặc không khớp định dạng biển Việt Nam sẽ không được chấp nhận.
+Model nhỏ được chạy trước và kết quả hợp lệ có độ tin cậy từ `0.98` được chấp nhận ngay. Trường hợp khó sẽ chạy thêm hai model, sau đó tính theo độ tin cậy ký tự và mức đồng thuận. Chuỗi dưới ngưỡng OCR `0.6` hoặc không khớp định dạng biển Việt Nam sẽ không được chấp nhận.
+
+Khi xử lý video web, YOLO vẫn chạy trên mọi frame nhưng OCR được giới hạn ở khoảng 10 lần mỗi giây. Bộ ổn định giữ toàn bộ biển đã xác nhận trong phiên, kể cả khi track đã rời khỏi khung hình, để lưu đầy đủ vào lịch sử.
 
 Backend ảnh còn thử crop rộng hơn 15% và 30% nếu lần đọc đầu có độ tin cậy dưới `0.9`.
 

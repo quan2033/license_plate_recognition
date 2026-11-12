@@ -1,4 +1,4 @@
-"""Đọc kí tự trên biển số bằng fast-plate-ocr (ONNX, chạy CPU ~10-25 ms/biển)."""
+"""Đọc kí tự trên biển số bằng fast-plate-ocr với chiến lược OCR thích ứng."""
 
 import re
 from collections import defaultdict
@@ -10,7 +10,9 @@ from fast_plate_ocr import LicensePlateRecognizer
 
 
 # Nhiều model cùng đọc rồi bỏ phiếu: mỗi model sai ở chỗ khác nhau
-MODEL_NAMES = ("cct-s-v1-global-model", "cct-s-v2-global-model", "cct-xs-v2-global-model")
+# Chạy model nhỏ trước. Hai model lớn chỉ dùng khi kết quả nhanh chưa đủ chắc chắn.
+MODEL_NAMES = ("cct-xs-v2-global-model", "cct-s-v2-global-model", "cct-s-v1-global-model")
+FAST_ACCEPT_CONFIDENCE = 0.98
 
 #Biển 2 dòng (xe máy) gần vuông, biển 1 dòng (ô tô) dài. Phân bố trong dataset
 #Biển 1 dòng chủ yếu 0.3-0.7, biển 2 dòng từ 0.8 trở lên, 0.75-1.0 là cùng mờ do độ nghiêng
@@ -30,8 +32,8 @@ MIN_CONFIDENCE = 0.6
 RETRY_BELOW_CONFIDENCE = 0.9
 WIDER_PADDINGS = (0.15, 0.3)
 
-#Biển VN không dùng I, J, O, Q, R, W làm
-SERIES_LETTERS = set("ABCDEFGHKLMNPSTUVXYZ")
+# I, J, O, Q, W không dùng làm seri. R vẫn xuất hiện trên một số biển xe máy cũ.
+SERIES_LETTERS = set("ABCDEFGHKLMNPRSTUVXYZ")
 
 #Sửa kí tự hay bị nhầm theo vị trí: vị trí số <- chữ, vị trí chữ <- số
 TO_DIGIT = {"O": "0", "Q": "0", "I": "1", "Z": "2", "S": "5", "G": "6", "B": "8"}
@@ -62,6 +64,10 @@ def _as_digits(chars):
 def format_plate(text, two_line=False):
     #Chuan hoa chuoi OCR thanh bien so VN; tra ve "" neu khong hop le. Chuẩn hóa chuỗi OCR thành biển số, trả về "" nếu không không hợp lệ
     text = re.sub(r"[^A-Z0-9]", "", text.upper())
+    # Biển xe máy cũ dạng 36-R3 0829 có 8 ký tự. Seri R kèm một chữ số,
+    # không được diễn giải thành biển một dòng 36R-308.29.
+    if len(text) == 8 and text[2:3] == "R" and text[3:4].isdigit():
+        two_line = True
     return _parse_plate(text, two_line) or _parse_plate(text, not two_line)
 
 
@@ -152,7 +158,7 @@ def read_plate(plate):
     recognizers = _get_recognizers()
     totals = defaultdict(float)
     supporters = defaultdict(int)
-    for recognizer in recognizers:
+    for index, recognizer in enumerate(recognizers):
         prediction = _run_model(recognizer, plate, gray)
         if prediction is None or not prediction.plate:
             continue
@@ -160,7 +166,12 @@ def read_plate(plate):
         if not text:
             continue
         chars = prediction.char_probs[:len(prediction.plate)]
-        totals[text] += float(chars.mean())
+        char_confidence = float(chars.mean())
+        # Model XS đủ chắc chắn và chuỗi đã qua kiểm tra định dạng thì không cần
+        # chạy thêm hai model lớn. Trường hợp khó vẫn dùng đủ bộ model để bỏ phiếu.
+        if index == 0 and char_confidence >= FAST_ACCEPT_CONFIDENCE:
+            return text, char_confidence
+        totals[text] += char_confidence
         supporters[text] += 1
 
     if not totals:

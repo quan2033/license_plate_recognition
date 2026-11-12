@@ -31,6 +31,9 @@ class PlateStabilizer:
         self.new_plate_confidence = 0.8
         self.same_plate_similarity = 0.6
         self.tracks = {}
+        # Lưu toàn bộ biển đã xác nhận trong phiên, độc lập với các track còn sống.
+        # Video có thể làm track cũ hết hạn trước khi xử lý xong toàn bộ file.
+        self.recognized_plates = {}
         self.next_track_id = 0
 
     def update(self, box, text, confidence, frame_number):
@@ -75,6 +78,22 @@ class PlateStabilizer:
         # CSV và một frame đọc nhầm sau đó không ghi đè lên kết quả đã có
         if text and confidence >= self.instant_confidence and "accepted" not in track:
             track["accepted"], track["confirmed"] = text, False
+        accepted = track.get("accepted")
+        if accepted and track.get("confirmed", False):
+            accepted_scores = [
+                score for vote_text, score in track["votes"]
+                if vote_text == accepted
+            ]
+            accepted_confidence = (
+                sum(accepted_scores) / len(accepted_scores)
+                if accepted_scores else confidence
+            )
+            previous_confidence = self.recognized_plates.get(accepted)
+            if (
+                previous_confidence is None
+                or accepted_confidence > previous_confidence
+            ):
+                self.recognized_plates[accepted] = round(accepted_confidence, 4)
         ready = track.get("confirmed", False) and not track.get("logged", False)
         if ready:
             track["logged"] = True

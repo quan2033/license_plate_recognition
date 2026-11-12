@@ -15,6 +15,7 @@ import numpy as np
 
 import frame_processor
 import media
+import plate_ocr
 from plate_ocr import crop_plate, format_plate, is_two_line, read_plate
 from plate_tracking import CsvLogger, PlateStabilizer
 
@@ -33,6 +34,11 @@ class PlatePipelineTests(unittest.TestCase):
         # Crop oto bị nghiêng có tỉ lệ cao như biển xe máy: vẫn phải đọc được
         self.assertEqual(format_plate("50Z0618", two_line=True), "50Z-0618")
         self.assertEqual(format_plate("43H16799", two_line=True), "43H1-6799")
+
+    def test_format_plate_accepts_old_r_series_motorcycle_plate(self):
+        self.assertEqual(format_plate("36R30829", two_line=True), "36R3-0829")
+        # OCR đôi khi phân loại nhầm bố cục, nhưng seri R3 vẫn phải được giữ đúng.
+        self.assertEqual(format_plate("36R30829", two_line=False), "36R3-0829")
 
     def test_format_plate_fixes_confusable_characters(self):
         self.assertEqual(format_plate("5IA69172"), "51A-691.72")  # I -> 1 ở vị trí số
@@ -111,6 +117,21 @@ class PlatePipelineTests(unittest.TestCase):
         stabilizer.update(box, "51A-034.49", 0.6, 2)
         self.assertEqual(stabilizer.update(box, "51A-034.42", 0.7, 3), ("51A-034.42", True))
 
+    def test_stabilizer_remembers_plate_after_track_expires(self):
+        stabilizer = PlateStabilizer(min_votes=2, max_age=1)
+        first_box = (10, 10, 110, 50)
+        stabilizer.update(first_box, "36R3-0829", 0.99, 1)
+        stabilizer.update(first_box, "36R3-0829", 0.99, 2)
+
+        second_box = (300, 300, 400, 350)
+        stabilizer.update(second_box, "29N1-478.54", 0.99, 4)
+
+        self.assertNotIn(
+            "36R3-0829",
+            [track.get("accepted") for track in stabilizer.tracks.values()],
+        )
+        self.assertEqual(stabilizer.recognized_plates["36R3-0829"], 0.99)
+
     def test_logger_only_receives_confirmed_plates(self):
         detected_box = SimpleNamespace(xyxy=[np.array([10, 10, 110, 50])], conf=[np.array(0.9)])
         model = lambda *_args, **_kwargs: [SimpleNamespace(boxes=[detected_box])]
@@ -154,6 +175,22 @@ class PlatePipelineTests(unittest.TestCase):
 
     def test_read_plate_handles_empty_crop(self):
         self.assertEqual(read_plate(np.zeros((0, 0, 3), dtype=np.uint8)), ("", 0.0))
+
+    def test_read_plate_stops_after_confident_fast_model(self):
+        prediction = SimpleNamespace(
+            plate="51A03442",
+            char_probs=np.ones(8, dtype=np.float32),
+        )
+        recognizers = [object(), object(), object()]
+        plate = np.full((80, 160, 3), 255, dtype=np.uint8)
+
+        with (
+            patch.object(plate_ocr, "_get_recognizers", return_value=recognizers),
+            patch.object(plate_ocr, "_run_model", return_value=prediction) as run_model,
+        ):
+            self.assertEqual(read_plate(plate), ("51A-034.42", 1.0))
+
+        self.assertEqual(run_model.call_count, 1)
 
     def test_ocr_runs_only_on_configured_frames(self):
         detected_box = SimpleNamespace(
